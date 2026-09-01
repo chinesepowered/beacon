@@ -171,6 +171,13 @@ export const setSourceStatus = internalMutation({
   },
 });
 
+export const setSourceEmail = internalMutation({
+  args: { sourceId: v.id("sources"), orgEmail: v.string() },
+  handler: async (ctx, { sourceId, orgEmail }) => {
+    await ctx.db.patch(sourceId, { orgEmail });
+  },
+});
+
 /** Sources belonging to open cases that have not been scraped recently. */
 export const sourcesDueForSweep = internalQuery({
   args: { olderThanMs: v.number(), limit: v.number() },
@@ -187,7 +194,7 @@ export const sourcesDueForSweep = internalQuery({
         .withIndex("by_case", (q) => q.eq("caseId", c._id))
         .collect();
       for (const s of sources) {
-        if (s.status === "scanning") continue;
+        if (s.status === "scanning" || s.status === "unsupported") continue;
         if ((s.lastScrapedAt ?? 0) < cutoff) due.push(s._id);
         if (due.length >= limit) return due;
       }

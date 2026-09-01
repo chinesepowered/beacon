@@ -31,10 +31,10 @@ export const kickoff = internalAction({
 
       await set("scanning");
       const sources: Doc<"sources">[] = await ctx.runQuery(internal.store.caseSources, { caseId });
-      // Firecrawl free tier: 2 concurrent requests. Stagger the first scans.
-      sources.forEach((s: Doc<"sources">, i: number) => {
-        void ctx.scheduler.runAfter(i * 4000, internal.crawl.scrapeSource, { sourceId: s._id });
-      });
+      // Firecrawl free tier: ~10 requests a minute. Stagger the first scans.
+      for (const [i, s] of sources.entries()) {
+        await ctx.scheduler.runAfter(i * 8000, internal.crawl.scrapeSource, { sourceId: s._id });
+      }
       if (!sources.length) {
         await ctx.runMutation(internal.store.logEvent, {
           caseId,

@@ -101,16 +101,6 @@ export const run = internalMutation({
       rawExcerpt:
         "# Pet FBI\n\nFree lost and found pet database. Search found pets by location and species.",
     });
-    const vet = await ctx.db.insert("sources", {
-      caseId,
-      url: "https://www.kitchenerwaterlooveterinary.example/",
-      kind: "vet",
-      name: "Victoria Park Animal Hospital",
-      orgEmail: "frontdesk@vpah.example",
-      status: "new",
-      discoveredVia: "Kitchener, Ontario veterinary clinic",
-    });
-
     // Listings extracted from those pages.
     const l1 = await ctx.db.insert("listings", {
       sourceId: kw,
@@ -274,7 +264,7 @@ export const run = internalMutation({
     // Live feed history.
     const feed: [number, string, string, unknown?][] = [
       [created, "system", "Case opened for Milo. Searching within 8 km of Victoria Park, near the clock tower."],
-      [created + 2 * MIN, "discover", "Found 4 shelters and lost-and-found pages near Kitchener, Ontario, 3 with a contact email.", { sources: [{ name: "Humane Society of Kitchener Waterloo & Stratford Perth", url: "https://kwsphumane.ca/found-pets", kind: "shelter" }, { name: "Guelph Humane Society", url: "https://guelphhumane.ca/services/lost-found/", kind: "shelter" }, { name: "Pet FBI lost & found database", url: "https://petfbi.org/", kind: "lostfound" }, { name: "Victoria Park Animal Hospital", url: "https://www.kitchenerwaterlooveterinary.example/", kind: "vet" }] }],
+      [created + 2 * MIN, "discover", "Found 3 shelters and lost-and-found pages near Kitchener, Ontario, 2 with a contact email.", { sources: [{ name: "Humane Society of Kitchener Waterloo & Stratford Perth", url: "https://kwsphumane.ca/found-pets", kind: "shelter" }, { name: "Guelph Humane Society", url: "https://guelphhumane.ca/services/lost-found/", kind: "shelter" }, { name: "Pet FBI lost & found database", url: "https://petfbi.org/", kind: "lostfound" }] }],
       [created + 6 * MIN, "email", "Emailed Humane Society of Kitchener Waterloo & Stratford Perth the flyer."],
       [created + 6 * MIN + 5000, "email", "Emailed Guelph Humane Society the flyer."],
       [created + 6 * MIN + 9000, "email", "Emailed Victoria Park Animal Hospital the flyer."],
@@ -292,7 +282,6 @@ export const run = internalMutation({
       await ctx.db.insert("events", { caseId, kind, text, meta, at });
     }
 
-    void vet;
     void petfbi;
     return { caseId, slug: "milo-victoria-park", caseCode: "BCN-MILO" };
   },

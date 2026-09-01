@@ -301,15 +301,24 @@ export function heuristicClassify(text: string): ReplyClassification {
     return { classification: "no_match", summary };
   }
   if (/\b(saw|seen|spotted|found|brought in|came in|have a|picked up|running|wandering|sighting)\b/.test(t)) {
-    const loc = t.match(/\b(?:near|at|by|around|on|in)\s+([a-z0-9 .'-]{3,40}?)(?:[.,;!\n]|$| this| yesterday| today| around)/);
-    return {
-      classification: "sighting",
-      summary,
-      locationText: loc ? loc[1].trim() : undefined,
-    };
+    return { classification: "sighting", summary, locationText: guessPlace(text) };
   }
   if (t.includes("?")) return { classification: "question", summary };
   return { classification: "other", summary };
+}
+
+const TIME_WORDS =
+  /\b(this|last|yesterday|today|tonight|morning|afternoon|evening|night|around|about|at)\s+(morning|afternoon|evening|night|\d{1,2}(:\d{2})?\s*(am|pm)?)\b|\b(yesterday|today|tonight|this morning|last night|earlier)\b/gi;
+
+/** Best-effort place phrase out of free text: "near Victoria Park" -> "Victoria Park". */
+export function guessPlace(text: string): string | undefined {
+  const cleaned = text.replace(TIME_WORDS, " ").replace(/\s+/g, " ");
+  const strong = cleaned.match(/\b(?:near|at|around|by|outside|beside|close to)\s+(?:the\s+)?([A-Z][\w'.-]*(?:\s+(?:[A-Z][\w'.-]*|and|of|the|&))*)/);
+  if (strong?.[1]) return strong[1].trim();
+  const weak = cleaned.match(/\b(?:on|in|along)\s+(?:the\s+)?([A-Z][\w'.-]*(?:\s+(?:[A-Z][\w'.-]*|and|of|the|&))*)/);
+  if (weak?.[1]) return weak[1].trim();
+  const lower = cleaned.match(/\b(?:near|at|around|by|along)\s+(?:the\s+)?([a-z][\w' -]{3,40}?)(?:[.,;!?\n]|$)/i);
+  return lower?.[1]?.trim();
 }
 
 export async function classifyReply(

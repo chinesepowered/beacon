@@ -33,6 +33,9 @@ const KIND_QUERIES: { kind: Kind; q: (city: string) => string }[] = [
 const MAX_SOURCES = 8;
 const MAX_CONTACTS = 8;
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+const UNSUPPORTED_HOSTS = ["facebook.com", "instagram.com", "tiktok.com", "x.com", "twitter.com", "youtube.com", "linkedin.com", "reddit.com", "nextdoor.com"];
+const SCRAPE_STAGGER_MS = 8000; // Firecrawl free tier: ~10 requests / minute
+const RATE_LIMIT_RETRY_MS = 70_000;
 
 class QuotaError extends Error {}
 
@@ -112,10 +115,15 @@ export async function discover(
     }
   }
 
-  // Dedupe by host so one big site does not crowd out the others.
+  // Dedupe by host so one big site does not crowd out the others, and drop
+  // social networks (Firecrawl cannot scrape them and they have no inbox).
   const byHost = new Map<string, SearchHit & { kind: Kind }>();
-  for (const h of hits) if (!byHost.has(hostOf(h.url))) byHost.set(hostOf(h.url), h);
-  const unique = [...byHost.values()];
+  for (const h of hits) {
+    const host = hostOf(h.url);
+    if (UNSUPPORTED_HOSTS.some((u) => host === u || host.endsWith(`.${u}`))) continue;
+    if (!byHost.has(host)) byHost.set(host, h);
+  }
+  const unique = [...byHost.values()].slice(0, 12);
 
   // LLM picks the relevant pages and lifts the org email off the page text.
   let picks: { url: string; name: string; kind: Kind; email?: string }[] = [];
@@ -260,7 +268,7 @@ function absolute(url: string | undefined, base: string): string | undefined {
   }
 }
 
-export async function scrapeOne(ctx: ActionCtx, sourceId: Id<"sources">): Promise<void> {
+export async function scrapeOne(ctx: ActionCtx, sourceId: Id<"sources">, attempt = 0): Promise<void> {
   const data: { source: Doc<"sources">; case: Doc<"cases"> | null } | null = await ctx.runQuery(internal.store.getSource, { sourceId });
   if (!data || !data.case) return;
   const { source, case: c } = data;
@@ -305,27 +313,46 @@ export async function scrapeOne(ctx: ActionCtx, sourceId: Id<"sources">): Promis
       }
     }
   } catch (e) {
-    // JSON extraction failed outright; fall back to a plain scrape so the source
-    // still shows a live excerpt, then mark the error.
-    try {
-      markdown = (await scrape(source.url)).markdown;
-    } catch {
-      // ignore
+    const msg = String(e);
+    if (/rate limit/i.test(msg) && attempt < 2) {
+      // Firecrawl's per-minute limit: back off and try again shortly.
+      await ctx.runMutation(internal.store.setSourceStatus, { sourceId, status: "new", lastError: "Waiting for crawl rate limit" });
+      await ctx.scheduler.runAfter(RATE_LIMIT_RETRY_MS * (attempt + 1), internal.crawl.scrapeSource, { sourceId, attempt: attempt + 1 });
+      return;
     }
+    const unsupported = /do not support this site|not supported/i.test(msg);
     await ctx.runMutation(internal.store.setSourceStatus, {
       sourceId,
-      status: "error",
+      status: unsupported ? "unsupported" : "error",
       lastScrapedAt: Date.now(),
-      lastError: String(e).slice(0, 200),
-      rawExcerpt: markdown ? excerpt(markdown) : undefined,
+      lastError: unsupported ? "Firecrawl does not support this site" : msg.slice(0, 200),
     });
     await ctx.runMutation(internal.store.logEvent, {
       caseId: c._id,
       kind: "system",
-      text: `Could not scan ${source.name}: ${String(e).slice(0, 120)}`,
+      text: unsupported
+        ? `Skipping ${source.name}: this site cannot be crawled.`
+        : `Could not scan ${source.name}: ${msg.replace(/^\w*Error:\s*/, "").slice(0, 120)}`,
       meta: { sourceId, url: source.url },
     });
     return;
+  }
+
+  // Lift a contact email off the page when discovery did not find one, so the
+  // flyer still goes out even when the model is unavailable.
+  if (!source.orgEmail) {
+    const email = firstEmail(markdown);
+    if (email) {
+      await ctx.runMutation(internal.store.setSourceEmail, { sourceId, orgEmail: email });
+      const r = await ctx.runMutation(internal.store.upsertContact, {
+        caseId: c._id,
+        orgName: source.name,
+        email,
+        kind: source.kind,
+        sourceUrl: source.url,
+      });
+      if (r.created) await ctx.scheduler.runAfter(0, internal.outreach.sendFlyers, { caseId: c._id });
+    }
   }
 
   let created = 0;
@@ -368,15 +395,15 @@ export async function scrapeOne(ctx: ActionCtx, sourceId: Id<"sources">): Promis
   });
 
   // Stagger scoring so a burst of listings does not trip the LLM burst limit.
-  newIds.forEach((listingId, i) => {
-    void ctx.scheduler.runAfter(i * 1500, internal.ai.scoreListing, { listingId });
-  });
+  for (const [i, listingId] of newIds.entries()) {
+    await ctx.scheduler.runAfter(i * 1500, internal.ai.scoreListing, { listingId });
+  }
 }
 
 export const scrapeSource = internalAction({
-  args: { sourceId: v.id("sources") },
-  handler: async (ctx, { sourceId }): Promise<void> => {
-    await scrapeOne(ctx, sourceId);
+  args: { sourceId: v.id("sources"), attempt: v.optional(v.number()) },
+  handler: async (ctx, { sourceId, attempt }): Promise<void> => {
+    await scrapeOne(ctx, sourceId, attempt ?? 0);
   },
 });
 
@@ -389,10 +416,10 @@ export const sweep = internalAction({
       olderThanMs: 25 * 60 * 1000,
       limit: 20,
     });
-    // Firecrawl allows 2 concurrent requests on the free tier: stagger.
-    due.forEach((sourceId: Id<"sources">, i: number) => {
-      void ctx.scheduler.runAfter(i * 4000, internal.crawl.scrapeSource, { sourceId });
-    });
+    // Firecrawl free tier: ~10 requests a minute and 2 concurrent. Stagger.
+    for (const [i, sourceId] of due.entries()) {
+      await ctx.scheduler.runAfter(i * SCRAPE_STAGGER_MS, internal.crawl.scrapeSource, { sourceId });
+    }
     return { scheduled: due.length };
   },
 });
