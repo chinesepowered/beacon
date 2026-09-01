@@ -6,7 +6,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { search, scrapeJson, scrape, excerpt, type SearchHit } from "./lib/firecrawl";
+import { search, scrapeJson, excerpt, type SearchHit } from "./lib/firecrawl";
 import { extract } from "./lib/llm";
 import { rateLimiter, isRateLimitError, assertNotPaused, QUOTA_MESSAGE } from "./lib/limits";
 import { llmGuarded } from "./ai";

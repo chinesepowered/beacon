@@ -1,46 +1,66 @@
-import { useQuery } from "convex/react";
-import { api } from "../convex/_generated/api";
+import type { Id } from "../convex/_generated/dataModel";
 import { EnsureSignedIn } from "./auth";
+import { ErrorBoundary, Logo } from "./components/ui";
+import { match, useRoute } from "./lib/router";
+import { ToastProvider } from "./lib/toast";
+import { Admin } from "./pages/Admin";
+import { CaseRoom } from "./pages/CaseRoom";
+import { Flyer } from "./pages/Flyer";
+import { Landing } from "./pages/Landing";
+import { NewCase } from "./pages/NewCase";
 
-function Status() {
-  const settings = useQuery(api.mail.getSettings);
-  const usage = useQuery(api.usage.today);
+function Shell() {
+  const { path, navigate } = useRoute();
 
+  // Public flyer: no sign-in needed, no chrome (it prints).
+  const flyer = match("/p/:slug", path);
+  if (flyer) {
+    return (
+      <ErrorBoundary fallback={<NotFound navigate={navigate} />}>
+        <Flyer slug={flyer.slug} navigate={navigate} />
+      </ErrorBoundary>
+    );
+  }
+
+  const caseRoute = match("/case/:id", path);
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900">
-      <div className="mx-auto max-w-2xl px-6 py-16">
-        <h1 className="text-3xl font-semibold tracking-tight">Beacon</h1>
-        <p className="mt-2 text-stone-600">
-          Chassis is up: signed in, live queries connected.
-        </p>
+    <EnsureSignedIn>
+      <header className="sticky top-0 z-[900] border-b border-cream-200/80 bg-cream-50/85 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-4 md:px-6">
+          <button onClick={() => navigate("/")} aria-label="Beacon home"><Logo /></button>
+          <nav className="flex items-center gap-1 text-sm">
+            <button onClick={() => navigate("/")} className={`rounded-full px-3 py-1.5 font-medium ${path === "/" ? "bg-cream-200" : "hover:bg-cream-100"}`}>Home</button>
+            <button onClick={() => navigate("/new")} className="rounded-full bg-ember-600 px-3.5 py-1.5 font-semibold text-white hover:bg-ember-700">Report a lost pet</button>
+          </nav>
+        </div>
+      </header>
+      <main>
+        <ErrorBoundary fallback={<NotFound navigate={navigate} />}>
+          {path === "/" && <Landing navigate={navigate} />}
+          {path === "/new" && <NewCase navigate={navigate} />}
+          {path === "/admin" && <Admin navigate={navigate} />}
+          {caseRoute && <CaseRoom key={caseRoute.id} caseId={caseRoute.id as Id<"cases">} navigate={navigate} />}
+          {path !== "/" && path !== "/new" && path !== "/admin" && !caseRoute && <NotFound navigate={navigate} />}
+        </ErrorBoundary>
+      </main>
+    </EnsureSignedIn>
+  );
+}
 
-        <dl className="mt-8 space-y-3 text-sm">
-          <div className="flex gap-3">
-            <dt className="w-40 shrink-0 text-stone-500">Inbox</dt>
-            <dd>{settings ? settings.inboxAddress : "not created yet"}</dd>
-          </div>
-          <div className="flex gap-3">
-            <dt className="w-40 shrink-0 text-stone-500">Usage today</dt>
-            <dd>
-              {usage
-                ? Object.keys(usage.counts).length
-                  ? Object.entries(usage.counts)
-                      .map(([k, n]) => `${k}: ${n}`)
-                      .join(" · ")
-                  : "nothing spent yet"
-                : "…"}
-            </dd>
-          </div>
-        </dl>
-      </div>
+function NotFound({ navigate }: { navigate: (to: string) => void }) {
+  return (
+    <div className="mx-auto max-w-xl px-5 py-24 text-center">
+      <p className="text-5xl">🐾</p>
+      <p className="mt-4 font-display text-3xl font-semibold">Nothing here</p>
+      <button className="mt-6 rounded-full bg-ember-600 px-5 py-2.5 font-semibold text-white" onClick={() => navigate("/")}>Back to Beacon</button>
     </div>
   );
 }
 
 export default function App() {
   return (
-    <EnsureSignedIn>
-      <Status />
-    </EnsureSignedIn>
+    <ToastProvider>
+      <Shell />
+    </ToastProvider>
   );
 }
