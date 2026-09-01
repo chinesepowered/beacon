@@ -6,7 +6,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { search, scrapeJson, excerpt, type SearchHit } from "./lib/firecrawl";
+import { search, scrapeJson, scrape, map as mapSite, excerpt, type SearchHit } from "./lib/firecrawl";
 import { extract } from "./lib/llm";
 import { rateLimiter, isRateLimitError, assertNotPaused, QUOTA_MESSAGE } from "./lib/limits";
 import { llmGuarded } from "./ai";
@@ -34,6 +34,8 @@ const MAX_SOURCES = 8;
 const MAX_CONTACTS = 8;
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 const UNSUPPORTED_HOSTS = ["facebook.com", "instagram.com", "tiktok.com", "x.com", "twitter.com", "youtube.com", "linkedin.com", "reddit.com", "nextdoor.com"];
+const MAX_CONTACT_LOOKUPS = 3; // per case: map + scrape of a contact page
+const AGGREGATOR_HOSTS = ["pawboost.com", "petfbi.org", "lost.ca", "petfinder.com", "yelp.com", "yellowpages.ca", "google.com", "craigslist.org", "kijiji.ca"];
 const SCRAPE_STAGGER_MS = 8000; // Firecrawl free tier: ~10 requests / minute
 const RATE_LIMIT_RETRY_MS = 70_000;
 
@@ -70,6 +72,36 @@ function hostOf(url: string): string {
 function cleanTitle(t: string | undefined, url: string): string {
   const base = (t ?? "").split(/[|\-–—:]/)[0].trim();
   return base.length >= 3 ? base.slice(0, 80) : hostOf(url);
+}
+
+function isAggregator(url: string): boolean {
+  const host = hostOf(url);
+  return AGGREGATOR_HOSTS.some((a) => host === a || host.endsWith(`.${a}`));
+}
+
+/**
+ * Find an organisation's email when the landing page has none: map the site,
+ * scrape its contact/about page, regex the address. Two Firecrawl calls, both
+ * rate-limited; null on any failure so discovery never stalls on it.
+ */
+async function findContactEmail(ctx: ActionCtx, url: string): Promise<string | undefined> {
+  let origin: string;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+  try {
+    await takeCrawlToken(ctx);
+    const links = await mapSite(origin, 40);
+    const contact =
+      links.find((l) => /contact/i.test(l)) ?? links.find((l) => /about|reach-us|get-in-touch|staff/i.test(l)) ?? origin;
+    await takeCrawlToken(ctx);
+    const page = await scrape(contact);
+    return firstEmail(page.markdown);
+  } catch {
+    return undefined;
+  }
 }
 
 const PickSchema = z.object({
@@ -162,9 +194,14 @@ export async function discover(
   const rawByUrl = new Map(unique.map((h) => [h.url, h]));
   let sourcesCreated = 0;
   let contactsCreated = 0;
+  let lookups = 0;
   for (const p of picks.slice(0, MAX_SOURCES)) {
     const raw = rawByUrl.get(p.url);
-    const email = p.email ?? firstEmail(raw?.markdown);
+    let email = p.email ?? firstEmail(raw?.markdown);
+    if (!email && lookups < MAX_CONTACT_LOOKUPS && !isAggregator(p.url)) {
+      lookups++;
+      email = await findContactEmail(ctx, p.url);
+    }
     const { created } = await ctx.runMutation(internal.store.upsertSource, {
       caseId: c._id,
       url: p.url,
