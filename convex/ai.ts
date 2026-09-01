@@ -300,7 +300,12 @@ export function heuristicClassify(text: string): ReplyClassification {
   if (/\b(no match|haven'?t seen|have not seen|not seen|nothing (yet|matching)|no (dog|cat|animal)s? matching|sorry,? (no|we))\b/.test(t)) {
     return { classification: "no_match", summary };
   }
-  if (/\b(saw|seen|spotted|found|brought in|came in|have a|picked up|running|wandering|sighting)\b/.test(t)) {
+  // Shelters phrase a hold a dozen ways ("surrendered to us", "turned in",
+  // "we may have your dog"), so keep this vocabulary wide. The no_match branch
+  // above runs first, so "we have not seen him" never lands here.
+  const SIGHTING =
+    /\b(saw|seen|spotted|sighting|found|picked up|running loose|wandering|stray|intake)\b|\b(brought|turned|handed|dropped|taken)\s+(in|into|to|over)\b|\bsurrendered\b|\bcame in\b|\bin our (care|custody|shelter|kennels?)\b|\b(we|they|i)\s+(may\s+|might\s+|possibly\s+|think\s+we\s+|believe\s+we\s+)?have\b/;
+  if (SIGHTING.test(t)) {
     return { classification: "sighting", summary, locationText: guessPlace(text) };
   }
   if (t.includes("?")) return { classification: "question", summary };
