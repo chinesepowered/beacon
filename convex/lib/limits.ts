@@ -13,6 +13,8 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
   userCrawl: { kind: "token bucket", rate: 10, period: HOUR, capacity: 5 },
   userSend: { kind: "token bucket", rate: 5, period: HOUR, capacity: 3 },
   userLlm: { kind: "token bucket", rate: 30, period: HOUR, capacity: 10 },
+  // Per public flyer slug (unauthenticated sighting reports)
+  publicReport: { kind: "fixed window", rate: 10, period: HOUR },
 
   // Global (key omitted)
   globalCrawl: { kind: "fixed window", rate: 150, period: DAY },

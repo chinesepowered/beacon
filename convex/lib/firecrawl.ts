@@ -43,6 +43,28 @@ export async function scrape(url: string): Promise<{ markdown: string; title?: s
   return { markdown: res?.markdown ?? "", title: res?.metadata?.title };
 }
 
+/**
+ * Scrape one page and have Firecrawl extract structured JSON from it in the
+ * same call (Firecrawl runs the extraction, so this works even when our own LLM
+ * endpoint is unavailable). Returns the markdown too, for the "source" drawer.
+ */
+export async function scrapeJson<T = unknown>(
+  url: string,
+  schema: Record<string, unknown>,
+  prompt: string,
+): Promise<{ markdown: string; title?: string; json: T | null }> {
+  const res: any = await firecrawl().scrape(url, {
+    formats: ["markdown", { type: "json", schema, prompt }],
+    maxAge: MAX_AGE_MS,
+    onlyMainContent: true,
+  });
+  return {
+    markdown: res?.markdown ?? "",
+    title: res?.metadata?.title,
+    json: (res?.json ?? null) as T | null,
+  };
+}
+
 /** List the URLs on a site (e.g. to find a menu or contact page). */
 export async function map(url: string, limit = 30): Promise<string[]> {
   const res: any = await firecrawl().map(url, { limit });
