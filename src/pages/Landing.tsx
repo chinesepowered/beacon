@@ -57,7 +57,7 @@ export function Landing({ navigate }: { navigate: (to: string) => void }) {
       <section className="mt-24 grid gap-4 md:grid-cols-4">
         {[
           ["1", "Report", "Photo, a few details, and a pin where you last saw them."],
-          ["2", "Search", "Beacon finds every shelter and lost-and-found page nearby and re-scans them every 30 minutes."],
+          ["2", "Search", "Beacon finds every shelter and lost-and-found page nearby and re-scans them on a schedule."],
           ["3", "Match", "Each found listing is scored against your pet — with the reasons, not just a number."],
           ["4", "Reach", "Every shelter and vet gets the flyer by email. Their replies land on your live board."],
         ].map(([n, t, b], i) => (

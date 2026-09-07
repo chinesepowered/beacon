@@ -454,7 +454,10 @@ export async function scrapeOne(ctx: ActionCtx, sourceId: Id<"sources">, attempt
   await ctx.runMutation(internal.store.logEvent, {
     caseId: c._id,
     kind: "scan",
-    text: `Scanned ${source.name} — ${raw.length} listing${raw.length === 1 ? "" : "s"}, ${created} new${created ? ", matching now" : ""}.`,
+    text:
+      raw.length === 0
+        ? `Scanned ${source.name} — nothing new posted.`
+        : `Scanned ${source.name} — ${raw.length} listing${raw.length === 1 ? "" : "s"}, ${created} new${created ? ", matching now" : ""}.`,
     meta: { sourceId, url: source.url, listings: raw.length, created, extractor },
   });
 

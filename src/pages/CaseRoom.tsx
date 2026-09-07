@@ -169,7 +169,7 @@ export function CaseRoom({ caseId, navigate }: { caseId: Id<"cases">; navigate: 
             title="No matches yet"
             body={
               (listings ?? []).length
-                ? `${(listings ?? []).length} listings scanned so far — nothing scored 60% or higher. Beacon re-scans every 30 minutes.`
+                ? `${(listings ?? []).length} listings scanned so far — nothing scored 60% or higher. Beacon re-scans every few hours.`
                 : "Once a shelter page lists a found animal that looks like yours, it appears here with the reasons."
             }
           />
@@ -245,7 +245,7 @@ function PipelineStatus({ status, note }: { status: string; note?: string }) {
     discovering: "Finding shelters & vets nearby…",
     emailing: "Emailing flyers…",
     scanning: "Scanning shelter pages…",
-    ready: "Search running · re-scans every 30 min",
+    ready: "Search running · re-scans every few hours",
     degraded: `Search running with issues${note ? `: ${note}` : ""}`,
   };
   const busy = ["queued", "discovering", "emailing", "scanning"].includes(status);
