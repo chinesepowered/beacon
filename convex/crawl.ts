@@ -93,12 +93,12 @@ async function findContactEmail(ctx: ActionCtx, url: string): Promise<string | u
   }
   try {
     await takeCrawlToken(ctx);
-    const links = await mapSite(origin, 40);
+    const links = (await mapSite(ctx, origin, 40)).data ?? [];
     const contact =
       links.find((l) => /contact/i.test(l)) ?? links.find((l) => /about|reach-us|get-in-touch|staff/i.test(l)) ?? origin;
     await takeCrawlToken(ctx);
-    const page = await scrape(contact);
-    return firstEmail(page.markdown);
+    const page = (await scrape(ctx, contact)).data;
+    return page ? firstEmail(page.markdown) : undefined;
   } catch {
     return undefined;
   }
@@ -136,7 +136,7 @@ export async function discover(
       throw e;
     }
     try {
-      const res = await search(q(c.city), 5);
+      const res = (await search(ctx, q(c.city), 5)).data ?? [];
       for (const h of res) if (h.url) hits.push({ ...h, kind });
     } catch (e) {
       await ctx.runMutation(internal.store.logEvent, {
@@ -334,7 +334,20 @@ export async function scrapeOne(ctx: ActionCtx, sourceId: Id<"sources">, attempt
   let raw: RawListing[] = [];
   let extractor = "firecrawl-json";
   try {
-    const res = await scrapeJson<{ listings?: RawListing[] }>(source.url, LISTINGS_JSON_SCHEMA, LISTINGS_PROMPT);
+    const got = await scrapeJson<{ listings?: RawListing[] }>(ctx, source.url, LISTINGS_JSON_SCHEMA, LISTINGS_PROMPT);
+    if (!got.data) {
+      // No crawl budget and nothing stored for this page. Say so plainly and
+      // leave whatever listings we already have on screen.
+      await ctx.runMutation(internal.store.setSourceStatus, {
+        sourceId,
+        status: "paused",
+        lastScrapedAt: Date.now(),
+        lastError: "Live crawling is paused to protect the shared crawl budget",
+      });
+      return;
+    }
+    const res = got.data;
+    if (got.stale) extractor = "firecrawl-json (saved copy)";
     markdown = res.markdown;
     raw = Array.isArray(res.json?.listings) ? res.json!.listings : [];
     if (!res.json) {
@@ -480,5 +493,18 @@ export const scanNow = action({
     }
     await scrapeOne(ctx, sourceId);
     return { ok: true };
+  },
+});
+
+/**
+ * Ops probe: exercise the crawl gateway directly, bypassing the per-call token,
+ * so the credit guard and the stored-result fallback can be checked on a live
+ * deployment without touching product state.
+ */
+export const budgetProbe = internalAction({
+  args: { url: v.string() },
+  handler: async (ctx, { url }): Promise<{ hasData: boolean; cached: boolean; stale: boolean; reason?: string }> => {
+    const r = await scrape(ctx, url);
+    return { hasData: Boolean(r.data), cached: r.cached, stale: r.stale, reason: r.reason };
   },
 });
