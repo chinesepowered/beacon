@@ -50,7 +50,14 @@ async function takeCrawlToken(ctx: ActionCtx) {
     if (isRateLimitError(e)) throw new QuotaError(QUOTA_MESSAGE);
     throw e;
   }
-  await ctx.runMutation(internal.usage.bump, { provider: "firecrawl" });
+}
+
+/**
+ * Count only calls that actually reached Firecrawl. A stored result costs
+ * nothing, so counting it would make the figure on /usage mean the wrong thing.
+ */
+async function meter(ctx: ActionCtx, r: { cached: boolean }, amount = 1) {
+  if (!r.cached) await ctx.runMutation(internal.usage.bump, { provider: "firecrawl", amount });
 }
 
 function firstEmail(markdown: string | undefined): string | undefined {
@@ -93,11 +100,15 @@ async function findContactEmail(ctx: ActionCtx, url: string): Promise<string | u
   }
   try {
     await takeCrawlToken(ctx);
-    const links = (await mapSite(ctx, origin, 40)).data ?? [];
+    const mapped = await mapSite(ctx, origin, 40);
+    await meter(ctx, mapped, 2);
+    const links = mapped.data ?? [];
     const contact =
       links.find((l) => /contact/i.test(l)) ?? links.find((l) => /about|reach-us|get-in-touch|staff/i.test(l)) ?? origin;
     await takeCrawlToken(ctx);
-    const page = (await scrape(ctx, contact)).data;
+    const fetched = await scrape(ctx, contact);
+    await meter(ctx, fetched, 2);
+    const page = fetched.data;
     return page ? firstEmail(page.markdown) : undefined;
   } catch {
     return undefined;
@@ -136,7 +147,9 @@ export async function discover(
       throw e;
     }
     try {
-      const res = (await search(ctx, q(c.city), 5)).data ?? [];
+      const found = await search(ctx, q(c.city), 5);
+      await meter(ctx, found, 2);
+      const res = found.data ?? [];
       for (const h of res) if (h.url) hits.push({ ...h, kind });
     } catch (e) {
       await ctx.runMutation(internal.store.logEvent, {
@@ -335,6 +348,7 @@ export async function scrapeOne(ctx: ActionCtx, sourceId: Id<"sources">, attempt
   let extractor = "firecrawl-json";
   try {
     const got = await scrapeJson<{ listings?: RawListing[] }>(ctx, source.url, LISTINGS_JSON_SCHEMA, LISTINGS_PROMPT);
+    await meter(ctx, got, 10);
     if (!got.data) {
       // No crawl budget and nothing stored for this page. Say so plainly and
       // leave whatever listings we already have on screen.
