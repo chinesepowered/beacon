@@ -8,6 +8,6 @@ import { internal } from "./_generated/api";
  */
 const crons = cronJobs();
 
-crons.interval("re-scan shelter pages for open cases", { minutes: 30 }, internal.crawl.sweep, {});
+crons.interval("re-scan shelter pages for open cases", { hours: 6 }, internal.crawl.sweep, {});
 
 export default crons;
