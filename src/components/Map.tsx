@@ -51,10 +51,24 @@ export function MapView({ center, zoom = 13, pins, radiusKm, radiusCenter, onCli
       touchZoom: interactive,
       attributionControl: true,
     }).setView([center.lat, center.lng], zoom);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(m);
+    // Esri rather than tile.openstreetmap.org: the OSM community server rate
+    // limits application traffic, which showed up as blank squares in the map.
+    // (CARTO was tried and now returns an "API key required" watermark tile.)
+    // Esri serves a keyless light basemap from a CDN, and the muted styling
+    // lets the coloured pins carry the eye.
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      {
+        maxZoom: 16,
+        attribution: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a>',
+      },
+    ).addTo(m);
+    // The gray canvas ships without labels; its companion reference layer puts
+    // street and place names back so the map reads as a real neighbourhood.
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 16 },
+    ).addTo(m);
     m.on("click", (e) => clickRef.current?.({ lat: e.latlng.lat, lng: e.latlng.lng }));
     map.current = m;
     // Container may have been sized after mount (grid/flex): re-measure.
