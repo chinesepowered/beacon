@@ -4,7 +4,7 @@
 - **Event:** Convex All Gas Hackathon
 - **What it does:** Turns one lost-pet report into an always-on search that crawls local shelter pages, scores found-animal listings against the pet, emails nearby shelters and vets the flyer, and routes their replies onto a live case map.
 - **Live app:** https://moonlit-ferret-277.convex.site
-- **Repo:** none
+- **Repo:** https://github.com/chinesepowered/beacon
 - **Frontend:** Convex static hosting
 - **Convex deployment:** https://moonlit-ferret-277.convex.cloud
 - **Components:** @convex-dev/static-hosting, @convex-dev/agent, @convex-dev/rate-limiter
