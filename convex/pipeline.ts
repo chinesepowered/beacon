@@ -39,7 +39,7 @@ export const kickoff = internalAction({
         await ctx.runMutation(internal.store.logEvent, {
           caseId,
           kind: "system",
-          text: "No sources to scan yet. The 30-minute sweep will retry discovery on the next run.",
+          text: "No local shelter or lost-and-found pages were found for this area yet.",
         });
       }
       await set("ready");

@@ -32,7 +32,7 @@ function iconFor(pin: Pin) {
   return L.divIcon({ html, className: "", iconSize: [0, 0], iconAnchor: [0, 0] });
 }
 
-/** Leaflet map with OpenStreetMap tiles. Pins animate in when they first appear. */
+/** Leaflet map with Esri light-grey basemap tiles. Pins animate in when they first appear. */
 export function MapView({ center, zoom = 13, pins, radiusKm, radiusCenter, onClick, fit, focus, className = "", interactive = true }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
