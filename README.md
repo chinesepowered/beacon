@@ -2,7 +2,7 @@
 
 **Your pet is missing. Beacon runs the search while you're out looking for them.**
 
-🌐 **[Live demo](https://moonlit-ferret-277.convex.site)** · 🎥 Demo video: `TODO: video link` · 📓 [Build log](hackathon.md)
+🌐 **[Live demo](https://moonlit-ferret-277.convex.site)** · 🎥 Demo video: [Watch the demo](https://www.youtube.com/watch?v=MMXR0BWSom4) · 📓 [Build log](hackathon.md)
 
 > The demo runs on the free tiers of Convex, OpenAI, Firecrawl and AgentMail, so under load some features may be rate-limited — the video shows the full flow.
 
